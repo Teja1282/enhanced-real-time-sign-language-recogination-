@@ -5,68 +5,25 @@ import tkinter
 from tkinter import filedialog
 from tkinter.filedialog import askopenfilename
 import cv2
-import random
 import numpy as np
-from keras.utils.np_utils import to_categorical
-from keras.layers import  MaxPooling2D
-from keras.layers import Dense, Dropout, Activation, Flatten
-from keras.layers import Convolution2D
-from keras.models import Sequential
-from keras.models import model_from_json
 import pickle
 import os
 import imutils
-from gtts import gTTS   
-from playsound import playsound
-import os
-from threading import Thread 
 
 main = tkinter.Tk()
-main.title("sign language recogination system ")
+main.title("Create Gesture")
 main.geometry("1300x1200")
 
 global filename
 global classifier
 
 bg = None
-playcount = 0
-
-names = ['six', 'done', 'five', 'home', 'ok', 'one','three','two']
-X = []
-
-def getID(name):
-    index = 0
-    for i in range(len(names)):
-        if names[i] == name:
-            index = i
-            break
-    return index  
+global name
 
 
 bgModel = cv2.createBackgroundSubtractorMOG2(0, 50)
 
-def deleteDirectory():
-    filelist = [ f for f in os.listdir('play') if f.endswith(".mp3") ]
-    for f in filelist:
-        os.remove(os.path.join('play', f))
 
-def play(playcount,gesture):
-    class PlayThread(Thread):
-        def __init__(self,playcount,gesture):
-            Thread.__init__(self) 
-            self.gesture = gesture
-            self.playcount = playcount
-
-        def run(self):
-            t1 = gTTS(text=self.gesture, lang='en', slow=False)
-            t1.save("play/"+str(self.playcount)+".mp3")
-            playsound("play/"+str(self.playcount)+".mp3")
-            
-
-    newthread = PlayThread(playcount,gesture) 
-    newthread.start()
-    
-            
 
 def remove_background(frame):
     fgmask = bgModel.apply(frame, learningRate=0)
@@ -76,63 +33,11 @@ def remove_background(frame):
     return res
 
 def uploadDataset():
-    global filename
-    global labels
-    labels = []
-    filename = filedialog.askdirectory(initialdir=".")
-    pathlabel.config(text=filename)
-    text.delete('1.0', END)
-    text.insert(END,filename+" loaded\n\n");
-    
+    global name
+    name = simpledialog.askstring("Enter Gesture Name to save images", "Enter Gesture Name to save images", parent=main)
+    if os.path.exists("Dataset/"+name) == False:
+        os.mkdir("Dataset/"+name)
 
-
-def trainCNN():
-    global classifier
-    text.delete('1.0', END)
-    X_train = np.load('model/X.txt.npy')
-    Y_train = np.load('model/Y.txt.npy')
-    text.insert(END,"CNN is training on total images : "+str(len(X_train))+"\n")
-
-    if os.path.exists('model/model.json'):
-        with open('model/model.json', "r") as json_file:
-            loaded_model_json = json_file.read()
-            classifier = model_from_json(loaded_model_json)
-        classifier.load_weights("model/model_weights.h5")
-        classifier._make_predict_function()   
-        print(classifier.summary())
-        f = open('model/history.pckl', 'rb')
-        data = pickle.load(f)
-        f.close()
-        acc = data['accuracy']
-        accuracy = acc[9] * 100
-        text.insert(END,"CNN Hand Gesture Training Model Prediction Accuracy = "+str(accuracy))
-    else:
-        classifier = Sequential()
-        classifier.add(Convolution2D(32, 3, 3, input_shape = (64, 64, 3), activation = 'relu'))
-        classifier.add(MaxPooling2D(pool_size = (2, 2)))
-        classifier.add(Convolution2D(32, 3, 3, activation = 'relu'))
-        classifier.add(MaxPooling2D(pool_size = (2, 2)))
-        classifier.add(Flatten())
-        classifier.add(Dense(output_dim = 256, activation = 'relu'))
-        classifier.add(Dense(output_dim = 5, activation = 'softmax'))
-        print(classifier.summary())
-        classifier.compile(optimizer = 'adam', loss = 'categorical_crossentropy', metrics = ['accuracy'])
-        hist = classifier.fit(X_train, Y_train, batch_size=16, epochs=10, shuffle=True, verbose=2)
-        classifier.save_weights('model/model_weights.h5')            
-        model_json = classifier.to_json()
-        with open("model/model.json", "w") as json_file:
-            json_file.write(model_json)
-        f = open('model/history.pckl', 'wb')
-        pickle.dump(hist.history, f)
-        f.close()
-        f = open('model/history.pckl', 'rb')
-        data = pickle.load(f)
-        f.close()
-        acc = data['accuracy']
-        accuracy = acc[49] * 100
-        text.insert(END,"CNN Hand Gesture Training Model Prediction Accuracy = "+str(accuracy))
-
-    
 
 def run_avg(image, aWeight):
     global bg
@@ -154,8 +59,7 @@ def segment(image, threshold=25):
 
 
 def webcamPredict():
-    global playcount
-    oldresult = 'none'
+    global name
     count = 0
     fgbg2 = cv2.createBackgroundSubtractorKNN(); 
     aWeight = 0.5
@@ -179,40 +83,15 @@ def webcamPredict():
             if hand is not None:
                 (thresholded, segmented) = hand
                 cv2.drawContours(clone, [segmented + (right, top)], -1, (0, 0, 255))
-                #cv2.imwrite("test.jpg",temp)
-                #cv2.imshow("Thesholded", temp)
-                #ret, thresh = cv2.threshold(temp, 150, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-                #thresh = cv2.resize(thresh, (64, 64))
-                #thresh = np.array(thresh)
-                #img = np.stack((thresh,)*3, axis=-1)
                 roi = frame[top:bottom, right:left]
                 roi = fgbg2.apply(roi); 
                 cv2.imwrite("test.jpg",roi)
-                #cv2.imwrite("newDataset/Fist/"+str(count)+".png",roi)
-                #count = count + 1
-                #print(count)
-                img = cv2.imread("test.jpg")
-                img = cv2.resize(img, (28, 28))
-                img = img.reshape(1, 28, 28, 3)
-                img = np.array(img, dtype='float32')
-                img /= 255
-                predict = classifier.predict(img)
-                value = np.amax(predict)
-                cl = np.argmax(predict)
-                result = names[np.argmax(predict)]
-                if value >= 0.99:
-                    print(str(value)+" "+str(result))
-                    oldresult = 'Gesture Recognize as : '+str(result)
-                    cv2.putText(clone, 'Gesture Recognize as : '+str(result), (10, 25),  cv2.FONT_HERSHEY_SIMPLEX,0.5, (0, 255, 255), 2)
-                    if oldresult != result:
-                        play(playcount,result)
-                        oldresult = result
-                        playcount = playcount + 1
-                #else:
-                #    cv2.putText(clone, oldresult, (10, 25),  cv2.FONT_HERSHEY_SIMPLEX,0.5, (0, 255, 255), 2)
+                cv2.imwrite("Dataset/"+name+"/"+str(count)+".png",roi)
+                count = count + 1
+                print(count)
+                if count > 500:
+                    break
                 cv2.imshow("video frame", roi)
-            else:
-                cv2.putText(clone, 'No Gesture', (10, 25),  cv2.FONT_HERSHEY_SIMPLEX,0.5, (0, 255, 255), 2)
         cv2.rectangle(clone, (left, top), (right, bottom), (0,255,0), 2)
         num_frames += 1
         cv2.imshow("Video Feed", clone)
@@ -226,7 +105,7 @@ def webcamPredict():
     
     
 font = ('times', 16, 'bold')
-title = Label(main, text='sign language recogination system',anchor=W, justify=CENTER)
+title = Label(main, text='Create Gesture',anchor=W, justify=CENTER)
 title.config(bg='yellow4', fg='white')  
 title.config(font=font)           
 title.config(height=3, width=120)       
@@ -234,31 +113,16 @@ title.place(x=0,y=5)
 
 
 font1 = ('times', 13, 'bold')
-upload = Button(main, text="Upload ASL Dataset", command=uploadDataset)
+upload = Button(main, text="Enter Gesture name to save images", command=uploadDataset)
 upload.place(x=50,y=100)
 upload.config(font=font1)  
 
-pathlabel = Label(main)
-pathlabel.config(bg='yellow4', fg='white')  
-pathlabel.config(font=font1)           
-pathlabel.place(x=50,y=150)
 
-markovButton = Button(main, text="Train CNN with ASL Images", command=trainCNN)
-markovButton.place(x=50,y=200)
-markovButton.config(font=font1)
-
-predictButton = Button(main, text="ASL Recognition from Webcam", command=webcamPredict)
+predictButton = Button(main, text="Start Webcam", command=webcamPredict)
 predictButton.place(x=50,y=250)
 predictButton.config(font=font1)
 
 
-font1 = ('times', 12, 'bold')
-text=Text(main,height=15,width=78)
-scroll=Scrollbar(text)
-text.configure(yscrollcommand=scroll.set)
-text.place(x=450,y=100)
-text.config(font=font1)
 
-deleteDirectory()
 main.config(bg='magenta3')
 main.mainloop()
